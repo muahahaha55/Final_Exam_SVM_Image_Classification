@@ -1,0 +1,293 @@
+\documentclass[12pt,a4paper]{report}
+
+% ================= PACKAGES =================
+\usepackage[utf8]{vietnam}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{multirow}
+\usepackage{array}
+
+\geometry{margin=2.5cm}
+% ================= TITLE =================
+\title{\textbf{Ứng dụng SVM phi tuyến kết hợp với PCA cho bài toán phân loại hình ảnh}}
+\author{Nguyen Viet Phuong\\
+\small MSSV: \textit{24022431}}
+\date{\today}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+% ======================================================
+\chapter{Giới thiệu về chủ đề}
+
+\section{Bối cảnh và động cơ nghiên cứu}
+
+Trong những năm gần đây, bài toán phân loại hình ảnh (Image Classification) đã trở thành một trong những bài toán trung tâm của lĩnh vực Thị giác máy tính (Computer Vision) và Trí tuệ nhân tạo (Artificial Intelligence). Với sự phát triển mạnh mẽ của các mô hình học máy và học sâu, việc tự động nhận diện và phân loại đối tượng trong bức ảnh được ứng dụng rộng rãi trong nhiều lĩnh vực như y tế, công nghiệp hay nông nghiệp. 
+
+Tuy nhiên, không phải lúc nào ta cũng có điều kiện về chi phí và dữ liệu để có thể triển khai triệt để công việc này. Trong nhiều trường hợp, đặc biệt là các bài toán có quy mô dữ liệu vừa phải, việc kết hợp các phương pháp trích xuất đặc trưng truyền thống với các mô hình học máy cổ điển vẫn mang lại hiệu quả cao, đồng thời tăng khả năng diễn giải và giảm thiểu chi phí huấn luyện.
+
+Xuất phát từ những điều này, bài báo cáo tập trung nghiên cứu bài toán phân loại ảnh nhị phân giữa \textit{Shells} và \textit{Pebbles}, dựa trên việc kết hợp hai phương pháp quan trọng trong Machine Learning: Máy vector hỗ trợ phi tuyến (Support Vector Machine) và Phân tích thành phần chính (Principal Component Analysis).
+
+\section{Mô tả bài toán}
+
+Bài toán đặt ra yêu cầu xây dựng một hệ thống học máy có khả năng tự động phân loại ảnh đầu vào thành một trong hai lớp:
+\begin{itemize}
+	\item \textbf{Shells}: Ảnh chứa các vỏ sinh vật biển với hình dạng và hoa văn phức tạp
+	\item \textbf{Pebbles}: Ảnh chứa các viên sỏi, đá nhỏ với bề mặt tương đối trơn và cấu trúc ngẫu nhiên.
+\end{itemize}
+
+Tập dữ liệu gồm 4284 bức ảnh, với 2743 ảnh Pebbles và 1541 ảnh Shells. Các ảnh có kích thước và tỉ lệ khác nhau, ánh sáng cũng như bối cảnh chụp đa dạng, làm tăng độ phức tạp trong quá trình xử lí hình ảnh.
+
+% ======================================================
+\chapter{Cơ sở lý thuyết}
+
+\section{Support Vector Machine (SVM)}
+
+\subsection{Bài toán phân loại nhị phân}
+
+Xét tập dữ liệu huấn luyện:
+\[
+\mathcal{D} = \{(x_i, y_i)\}_{i=1}^{N},
+\quad x_i \in \mathbb{R}^d,
+\quad y_i \in \{-1, +1\}.
+\]
+
+Mục tiêu của Support Vector Machine là tìm một hàm quyết định:
+\[
+f(x) = w^{T}x - b
+\]
+sao cho các mẫu dữ liệu thuộc hai lớp được phân tách với \textit{khoảng cách biên} (margin) lớn nhất.
+
+\subsection{Linear SVM và bài toán tối ưu}
+
+Khoảng cách hình học từ một điểm $x_i$ đến siêu phẳng $w^{T}x - b = 0$ được cho bởi:
+\[
+\frac{|w^{T}x_i - b|}{\|w\|}.
+\]
+
+Để tối đa hóa khoảng cách biên giữa hai lớp, Linear SVM giải bài toán tối ưu lồi:
+\[
+\min_{w,b} \ \frac{1}{2}\|w\|^2
+\quad \text{s.t.} \quad
+y_i(w^{T}x_i - b) \ge 1, \ \forall i.
+\]
+
+Bài toán trên được gọi là \textbf{hard-margin SVM}, giả định rằng dữ liệu phân tách tuyến tính hoàn hảo.
+
+\subsection{Soft-margin SVM và hàm mất mát Hinge}
+
+Trong thực tế, dữ liệu thường có nhiễu và không thể phân tách hoàn hảo. Khi đó, ta đưa vào các biến trượt $\xi_i \ge 0$:
+\[
+\min_{w,b,\xi} \ \frac{1}{2}\|w\|^2 + C\sum_{i=1}^{N}\xi_i
+\]
+\[
+\text{s.t.} \quad y_i(w^{T}x_i - b) \ge 1 - \xi_i, \quad \xi_i \ge 0.
+\]
+
+Bài toán này tương đương với việc tối ưu hàm mất mát:
+\[
+\mathcal{L}(w) = \frac{1}{2}\|w\|^2
++ C\sum_{i=1}^{N} \max\bigl(0, 1 - y_i f(x_i)\bigr),
+\]
+trong đó
+\[
+\ell_{\text{hinge}}(y,f(x)) = \max(0, 1 - yf(x))
+\]
+được gọi là \textbf{hinge loss}.
+
+\subsection{Non-Linear SVM và Kernel Trick}
+
+Khi dữ liệu không thể phân tách tuyến tính trong không gian ban đầu, SVM sử dụng một ánh xạ phi tuyến:
+\[
+\phi: \mathbb{R}^d \rightarrow \mathcal{H},
+\]
+trong đó $\mathcal{H}$ là không gian đặc trưng có số chiều cao hơn.
+
+Hàm quyết định khi đó có dạng:
+\[
+f(x) = w^{T}\phi(x) - b.
+\]
+
+Bài toán tối ưu trở thành:
+\[
+\min_{w} \ \frac{1}{2}\|w\|^2
++ C\sum_{i=1}^{N} \max\bigl(0, 1 - y_i(w^{T}\phi(x_i) - b)\bigr).
+\]
+
+Thay vì tính $\phi(x)$ một cách tường minh, SVM sử dụng \textbf{kernel trick}:
+\[
+K(x_i, x_j) = \langle \phi(x_i), \phi(x_j) \rangle.
+\]
+
+Một số kernel phổ biến:
+\[
+\begin{aligned}
+	\text{Linear: } & K(x,z) = x^{T}z, \\
+	\text{Polynomial: } & K(x,z) = (x^{T}z + c)^p, \\
+	\text{RBF: } & K(x,z) = \exp(-\gamma \|x - z\|^2).
+\end{aligned}
+\]
+
+Trong báo cáo này, ánh xạ đa thức bậc hai:
+\[
+\phi(x) = [x, x^2]
+\]
+được sử dụng để mô hình hóa ranh giới quyết định phi tuyến.
+
+% ======================================================
+\section{Principal Component Analysis (PCA)}
+
+\subsection{Mục tiêu của PCA}
+
+Cho dữ liệu đã được chuẩn hóa:
+\[
+X = [x_1, x_2, \dots, x_N]^{T} \in \mathbb{R}^{N \times d}.
+\]
+
+PCA tìm một hướng chiếu $w$ sao cho phương sai của dữ liệu sau khi chiếu lên $w$ là lớn nhất:
+\[
+\max_{w} \ \text{Var}(Xw)
+\quad \text{s.t.} \quad \|w\| = 1.
+\]
+
+\subsection{Dạng toán học}
+
+Phương sai của dữ liệu sau chiếu được viết dưới dạng:
+\[
+\text{Var}(Xw) = w^{T}\Sigma w,
+\]
+trong đó ma trận hiệp phương sai:
+\[
+\Sigma = \frac{1}{N}X^{T}X.
+\]
+
+Bài toán PCA tương đương với:
+\[
+\max_{w} \ w^{T}\Sigma w
+\quad \text{s.t.} \quad w^{T}w = 1.
+\]
+
+\subsection{Chứng minh bằng nhân tử Lagrange}
+
+Xét hàm Lagrange:
+\[
+\mathcal{L}(w,\lambda) = w^{T}\Sigma w - \lambda(w^{T}w - 1).
+\]
+
+Lấy đạo hàm theo $w$:
+\[
+\frac{\partial \mathcal{L}}{\partial w}
+= 2\Sigma w - 2\lambda w = 0.
+\]
+
+Suy ra:
+\[
+\Sigma w = \lambda w.
+\]
+
+Do đó, các thành phần chính là các vector riêng của $\Sigma$ ứng với các trị riêng lớn nhất.
+
+\subsection{Giảm chiều dữ liệu}
+
+Chọn $k$ vector riêng ứng với $k$ trị riêng lớn nhất:
+\[
+W_k = [w_1, w_2, \dots, w_k].
+\]
+
+Dữ liệu sau khi giảm chiều:
+\[
+Z = XW_k.
+\]
+
+Tỉ lệ phương sai được giữ lại:
+\[
+\text{EVR}(k) =
+\frac{\sum_{i=1}^{k}\lambda_i}
+{\sum_{j=1}^{d}\lambda_j}.
+\]
+
+% ======================================================
+\section{Vai trò của PCA trong SVM}
+
+Trong bài toán phân loại ảnh, số chiều đặc trưng ban đầu $d$ rất lớn (hàng chục nghìn).
+PCA cho phép giảm chiều:
+\[
+d \gg k, \quad k \ll d.
+\]
+
+Chi phí huấn luyện SVM xấp xỉ:
+\[
+\mathcal{O}(N^2 k),
+\]
+Do đó việc giảm chiều giúp:
+\begin{itemize}
+	D\item Giảm mạnh chi phí tính toán,
+	\item Hạn chế hiện tượng overfitting,
+	\item Cải thiện khả năng tổng quát hóa của mô hình.
+\end{itemize}
+
+% ======================================================
+\chapter{Phương pháp huấn luyện}
+
+\section{Kiến trúc tổng thể của mô hình}
+
+Mô hình phân loại ảnh này được xây dựng theo kiến trúc pipeline học máy truyền thống, bao gồm cách khối xử lý tuần tự từ dữ liệu ảnh thô đến bộ phân loại cuối cùng. Không giống các mô hình học sâu học đặc trưng trực tiếp từ ảnh, kiến trúc đề xuất tách biệt rõ ràng giữa giai đoạn trích xuất đặc trưng và giai đoạn học mô hình.
+
+Cụ thể, kiến trúc tổng thể của mô hình gồm các thành phần chính sau:
+\begin{enumerate}
+	\item Đọc và kiểm tra dữ liệu ảnh từ tập dữ liệu gốc
+	\item Tiền xử lý và chuẩn hóa ảnh đầu vào
+	\item Biểu diễn ảnh dưới dạng vector đặc trưng có số chiều cao
+	\item Chuẩn hóa dữ liệu đặc trưng (mean = 0, std = 1)
+	\item Giảm chiều dữ liệu bằng Principal Component Analysis (PCA)
+	\item Huấn luyện mô hình Non-Linear Support Vector Machine
+	\item Đánh giá mô hình trên tập kiểm thử
+\end{enumerate}
+
+Cách tiếp cận này cho phép kiểm soát chặt chẽ từng bước xử lý, đồng thời đảm bảo sự nhất quán giữa mô tả lý thuyết và thực nghiệm.
+
+\section{Tập dữ liệu và nguồn dữ liệu}
+
+Tập dữ liệu được sử dụng trong nghiên cứu là \textit{Shells or Pebbles Dataset} được công bố trên nền tảng Kaggle.
+
+Các đặc điểm chính của tập dữ liệu:
+\begin{itemize}
+	\item Tổng số ảnh: 4284
+	\item Số lớp: 2 (Shells & Pebbles)
+	\item Số ảnh Pebbles: 2743
+	\item Số ảnh Shells: 1541
+\end{itemize}
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=0.75\textwidth]{Dataset.png}
+	\caption{Hình 1. Thống kê tập dữ liệu ảnh Shells \& Pebbles}
+	\label{fig:dataset_distribution}
+\end{figure}
+
+Hình~\ref{fig:dataset_distribution} cho thấy sự mất cân bằng tương đối giữa hai lớp dữ liệu,
+trong đó số lượng ảnh thuộc lớp Pebbles lớn hơn đáng kể so với lớp Shells.
+Đặc điểm này có thể ảnh hưởng đến khả năng tổng quát hóa của mô hình
+và được xem xét trong quá trình đánh giá kết quả.
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[width=\textwidth]{Five_random_samples.png}
+	\caption{Hình 2. Năm ảnh ngẫu nhiên được trích xuất từ mỗi lớp dữ liệu}
+	\label{fig:random_samples}
+\end{figure}
+
+Hình~\ref{fig:random_samples} minh họa sự đa dạng về hình dạng,
+màu sắc và kết cấu trong mỗi lớp dữ liệu.
+Đặc biệt, các ảnh thuộc lớp Shells thể hiện sự phức tạp cao về cấu trúc hình học,
+trong khi lớp Pebbles có xu hướng đồng nhất hơn về mặt hình dạng và texture.
+
+
